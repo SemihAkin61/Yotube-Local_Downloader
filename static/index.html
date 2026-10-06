@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube İndirici</title><meta name="description" content="YouTube videolarını MP3 veya 1080p MP4 olarak indir."><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/"><span class="brand-icon">▶</span> YouTube <span class="muted">İndirici</span></a><button id="theme" class="theme" aria-label="Aydınlık temaya geç">☀ <span>Aydınlık</span></button></header>
+<main>
+<div class="eyebrow"><span></span> VİDEO & SES</div>
+<h1>Bir bağlantı.<br><span>İstediğin format.</span></h1>
+<p class="intro">YouTube bağlantını yapıştır, formatını seç ve indir.</p>
+<section class="card" aria-label="İndirme paneli">
+<form id="inspect-form"><label for="url">YouTube bağlantısı</label><div class="url-row"><input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" required><button id="inspect" type="submit">Bağlantıyı getir</button></div></form>
+<div class="formats" role="group" aria-label="İndirme formatı">
+<button type="button" class="format selected" data-format="mp4" aria-pressed="true"><span class="format-symbol">▸</span><span><strong>Video <small>MP4</small></strong><em>1080p · daha düşükse kaynak kalitesi</em></span><span class="choice">✓</span></button>
+<button type="button" class="format" data-format="mp3" aria-pressed="false"><span class="format-symbol">♫</span><span><strong>Ses <small>MP3</small></strong><em>En iyi kaynak ses · 320 kbps</em></span><span class="choice">✓</span></button>
+</div>
+<p class="quality-note" id="quality-note">En fazla 1080p indirilir. 4K kaynaklar için de 1080p sürümü seçilir.</p>
+<div id="details" class="details" hidden><span class="detail-label">SEÇİLEN İÇERİK</span><h2 id="video-title"></h2><p id="channel" class="muted"></p><fieldset id="playlist" hidden><legend>Bu bağlantı bir oynatma listesi içeriyor.</legend><label><input type="radio" name="scope" value="single" checked> Yalnızca bu video</label><label><input type="radio" name="scope" value="playlist"> Oynatma listesinin tamamı</label></fieldset></div>
+<button type="button" id="download" class="download" disabled><span>↓</span> MP4 indir</button>
+<div id="status" class="status" role="status" aria-live="polite" hidden></div>
+<section id="progress-section" class="progress-section" hidden aria-label="İndirme ilerlemesi"><div class="progress-top"><span id="progress-label">Hazırlanıyor…</span><strong id="percent">0%</strong></div><progress id="progress" max="100" value="0">0%</progress><p id="progress-title"></p><p id="stats" class="muted"></p></section>
+<div id="files" class="files"></div>
+</section>
+<div class="footnotes"><span>◈ 1080p sınırı</span><span>♫ 320 kbps MP3</span><span>☷ Oynatma listesi desteği</span></div>
+<p class="save-note" id="save-note">Dosyalar bilgisayarındaki indirilenler klasörüne kaydedilir.</p>
+</main><footer>Bilgisayarında çalışan kişisel indirme alanın.</footer>
+</body></html>
