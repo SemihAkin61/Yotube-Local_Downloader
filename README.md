@@ -8,7 +8,7 @@ Windows üzerinde çalışan, tarayıcı arayüzlü YouTube video ve ses indiric
 - FFmpeg: `ffmpeg` ve `ffprobe` komutları PATH üzerinden erişilebilir olmalı.
 - Node.js 22 veya üzeri: `node` komutu PATH üzerinden erişilebilir olmalı. Uygulama Node.js'i otomatik bulup yt-dlp'ye bildirir.
 - İnternet bağlantısı. yt-dlp, kurulum sırasında resmi GitHub sürümünden indirilir.
-- İsteğe bağlı: `AC.vbs` ile penceresiz başlatmak için Brave ve Python'un `pyw.exe` başlatıcısı.
+- İsteğe bağlı: `AC.vbs` ile penceresiz başlatmak için Python'un `pyw.exe` başlatıcısı (Python kurulumuyla birlikte gelir).
 
 Python kodu yalnızca standart kütüphaneyi kullanır; `pip install` veya `requirements.txt` gerekmez. FFmpeg ve Node.js ayrı programlardır.
 
@@ -16,10 +16,20 @@ Python kodu yalnızca standart kütüphaneyi kullanır; `pip install` veya `requ
 
 1. Depoyu klonlayın veya ZIP olarak indirip bir klasöre çıkartın.
 2. Python, FFmpeg ve Node.js'i kurduktan sonra yeni bir terminal açın. `py -3 --version`, `ffmpeg -version`, `ffprobe -version` ve `node --version` komutlarıyla kontrol edin.
-3. `KURULUM.cmd` dosyasını çalıştırın. Bu işlem `.tools/yt-dlp.exe` dosyasını indirir veya günceller; Python ve FFmpeg'i kontrol eder. Python, FFmpeg veya Node.js'i kendisi kurmaz ve Node.js'i kontrol etmez.
-4. `BASLAT.cmd` dosyasını çalıştırın. Varsayılan tarayıcıda http://127.0.0.1:8765 açılır; terminal penceresini açık tutun.
+3. `KURULUM.cmd` dosyasını çalıştırın. Bu işlem `.tools/yt-dlp.exe` dosyasını indirir veya günceller, hızlı (çok bağlantılı) indirme yardımcısını hazırlar; Python ve FFmpeg'i kontrol eder. Python, FFmpeg veya Node.js'i kendisi kurmaz ve Node.js'i kontrol etmez.
+4. Uygulamayı başlatın (iki yol var):
+   - **Önerilen — `AC.vbs`:** Terminal penceresi açmadan arka planda başlar ve siteyi tarayıcıda açar. Brave kuruluysa Brave'de, değilse Windows'un varsayılan tarayıcısında (Chrome, Edge, Firefox vb.) açılır.
+   - **`BASLAT.cmd`:** Terminal penceresiyle başlar; hata ayıklarken kullanışlıdır. Terminal penceresini açık tutun.
 
-Brave kullanıyorsanız `AC.vbs` alternatif olarak uygulamayı arka planda açar. Masaüstü kısayolu kurulumla otomatik oluşturulmaz.
+### Masaüstü kısayolu
+
+Kısayol otomatik oluşturulmaz. `AC.vbs` dosyasına sağ tıklayıp **Diğer seçenekleri göster → Gönder → Masaüstü (kısayol oluştur)** seçin. Bundan sonra masaüstündeki simgeye çift tıklamanız yeterlidir.
+
+### Güncelleme
+
+- `git clone` ile indirdiyseniz proje klasöründe `git pull` çalıştırın; yalnızca değişen dosyalar iner, `indirilenler/` klasöründeki dosyalarınız korunur.
+- ZIP ile indirdiyseniz yeni ZIP'i indirip `indirilenler/` klasörünüzü yeni klasöre taşıyın.
+- Her güncellemeden sonra `KURULUM.cmd` dosyasını **bir kez** yeniden çalıştırın.
 
 ## Kullanım
 
@@ -33,6 +43,8 @@ Aynı anda bir indirme çalışır. Uygulamanın açık olduğu tüm sekmeler ka
 
 - Araçları güncellemek için `KURULUM.cmd` dosyasını yeniden çalıştırın.
 - İndirme çalışmıyorsa FFmpeg ve Node.js'in PATH üzerinden bulunabildiğini kontrol edin.
+- İndirme yavaşsa veya güncellemeden sonra sorun çıkıyorsa `KURULUM.cmd` dosyasını yeniden çalıştırın.
+- `AC.vbs` hata verirse ayrıntıyı görmek için `BASLAT.cmd` ile başlatın.
 - Özel, oturum gerektiren, canlı veya bölgesel kısıtlı içerikler her zaman indirilemeyebilir.
 - Uygulama yalnızca `127.0.0.1` adresinde, kendi bilgisayarınızda çalışır.
 

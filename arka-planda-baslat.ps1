@@ -1,3 +1,7 @@
+param(
+    # Test amacli: tarayiciyi acmaz, yalnizca hangi yontemin secildigini yazdirir.
+    [switch]$DryRun
+)
 $ErrorActionPreference = 'Stop'
 $siteUrl = 'http://127.0.0.1:8765'
 $projectFolder = $PSScriptRoot
@@ -17,15 +21,28 @@ function Test-Downloader {
     }
 }
 
-try {
-    $braveCandidates = @(
+function Find-Brave {
+    $candidates = @(
         (Join-Path $env:ProgramFiles 'BraveSoftware\Brave-Browser\Application\brave.exe'),
         (Join-Path ${env:ProgramFiles(x86)} 'BraveSoftware\Brave-Browser\Application\brave.exe'),
         (Join-Path $env:LOCALAPPDATA 'BraveSoftware\Brave-Browser\Application\brave.exe')
     )
-    $bravePath = $braveCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-    if (-not $bravePath) { throw 'Brave bulunamadi. Brave tarayicisini kurup tekrar deneyin.' }
+    return $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+}
 
+function Open-Site {
+    # Brave kuruluysa Brave ile yeni sekmede acilir; degilse Windows'un varsayilan tarayicisi kullanilir.
+    $bravePath = Find-Brave
+    if ($bravePath) {
+        if ($DryRun) { Write-Output "BROWSER=brave|$bravePath"; return }
+        Start-Process -FilePath $bravePath -ArgumentList @('--new-tab', $siteUrl)
+    } else {
+        if ($DryRun) { Write-Output 'BROWSER=default'; return }
+        Start-Process $siteUrl
+    }
+}
+
+try {
     try { $hasLock = $launcherMutex.WaitOne(30000) }
     catch [System.Threading.AbandonedMutexException] { $hasLock = $true }
     if (-not $hasLock) { throw 'Site zaten baslatiliyor. Biraz sonra yeniden deneyin.' }
@@ -42,8 +59,9 @@ try {
         }
         if (-not $ready) { throw 'Site baslatilamadi. Python kurulumunu ve 8765 portunu kontrol edin.' }
     }
-    Start-Process -FilePath $bravePath -ArgumentList @('--new-tab', $siteUrl)
+    Open-Site
 } catch {
+    if ($DryRun) { Write-Output "ERROR=$($_.Exception.Message)"; exit 1 }
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'YouTube Indirici', 'OK', 'Error') | Out-Null
 } finally {
