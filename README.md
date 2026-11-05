@@ -25,7 +25,7 @@ Brave kullanıyorsanız `AC.vbs` alternatif olarak uygulamayı arka planda açar
 
 1. YouTube video veya oynatma listesi bağlantısını yapıştırıp **Bağlantıyı getir** düğmesine basın.
 2. MP4 veya MP3 seçin; uygunsa tek video ya da tüm liste seçimini yapın.
-3. **İndir** düğmesine basın. Dosyalar `indirilenler/` altında işlem klasörlerine kaydedilir.
+3. **İndir** düğmesine basın. Sesler `indirilenler/mp3/`, videolar `indirilenler/mp4/` klasörüne kaydedilir. Dosya adlarında video kimliği bulunmaz; aynı isim varsa `(2)`, `(3)` eklenerek önceki dosya korunur. Önceden indirilmiş dosyalar mevcut konumlarında kalır.
 
 Aynı anda bir indirme çalışır. Uygulamanın açık olduğu tüm sekmeler kapatılınca sunucu yaklaşık 8–12 saniye sonra durur; devam eden indirme ve dönüştürmeler de durdurulur. Tamamlanan dosyalar korunur.
 

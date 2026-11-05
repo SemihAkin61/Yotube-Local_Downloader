@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DOWNLOADS = ROOT / 'indirilenler'
 TOOL = ROOT / '.tools' / 'yt-dlp.exe'
+ARIA = ROOT / '.tools' / 'aria2c.exe'
 JOBS = {}
 LOCK = threading.Lock()
 PORT = int(os.environ.get('YT_PORT', '8765'))
@@ -95,7 +96,7 @@ def urls(video, playlist):
 
 
 def base_args():
-    args = [str(TOOL), '--ignore-config', '--no-colors', '--no-warnings', '--socket-timeout', '25', '--retries', '2']
+    args = [str(TOOL), '--ignore-config', '--encoding', 'utf-8', '--no-colors', '--no-warnings', '--socket-timeout', '25', '--retries', '2']
     node = shutil.which('node')
     if node:
         args += ['--js-runtimes', f'node:{node}']
@@ -140,23 +141,54 @@ def update(job_id, **kwargs):
         JOBS[job_id].update(kwargs)
 
 
+def publish_file(job_id, path, folder, mode):
+    path = path.resolve()
+    if not path.is_relative_to(folder.resolve()) or path.suffix.lower() != '.' + mode or not path.is_file():
+        return
+    destination = DOWNLOADS / mode
+    destination.mkdir(parents=True, exist_ok=True)
+    title = re.sub(r' \[[A-Za-z0-9_-]+\]$', '', path.stem).rstrip(' .') or 'İndirme'
+    number = 1
+    while True:
+        name = title + (f' ({number})' if number > 1 else '') + '.' + mode
+        target = destination / name
+        try:
+            stream = target.open('xb')
+            break
+        except FileExistsError:
+            number += 1
+    try:
+        with stream, path.open('rb') as source:
+            shutil.copyfileobj(source, stream)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    path.unlink()
+    with LOCK:
+        JOBS[job_id]['files'].append({'name': name, 'url': '/files/' + mode + '/' + name})
+
+
 def run_job(job_id, value, mode, scope):
-    folder = DOWNLOADS / job_id
+    folder = ROOT / '.tools' / 'download-work' / job_id
     folder.mkdir(parents=True, exist_ok=True)
     video, playlist = normalize_url(value)
     single, full = urls(video, playlist)
     args = base_args() + ['--newline', '--progress', '--windows-filenames', '--no-overwrites', '--no-simulate',
-            '--output', str(folder / (('%(playlist_index)03d - ' if scope == 'playlist' else '') + '%(title).150B [%(id)s].%(ext)s')),
+            '--concurrent-fragments', '8',
+            '--extractor-args', 'youtube:player_client=web_embedded,default',
+            '--output', str(folder / '%(title).150B [%(autonumber)06d].%(ext)s'),
             '--progress-template', 'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s',
-            '--print', 'before_dl:ITEM|%(playlist_index)s|%(n_entries)s|%(title)s',
-            '--print', 'after_move:FILE|%(filepath)s']
+            '--print', 'before_dl:ITEM|%(playlist_index)s|%(n_entries)s|%(title)j',
+            '--print', 'after_move:FILE|%(filepath)j']
+    if ARIA.exists():
+        args += ['--downloader', str(ARIA)]
     ffmpeg = shutil.which('ffmpeg')
     if ffmpeg:
         args += ['--ffmpeg-location', str(Path(ffmpeg).parent)]
     if mode == 'mp3':
         args += ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '320K']
     else:
-        args += ['-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', '--merge-output-format', 'mp4', '--recode-video', 'mp4']
+        args += ['-f', 'bestvideo[height<=1080][ext=mp4]+bestaudio/bestvideo[height<=1080]+bestaudio/best[height<=1080]', '--merge-output-format', 'mp4', '--remux-video', 'mp4']
     args += ['--yes-playlist', full] if scope == 'playlist' else ['--no-playlist', single]
     errors = []
     try:
@@ -166,6 +198,7 @@ def run_job(job_id, value, mode, scope):
             line = raw.strip()
             if line.startswith('ITEM|'):
                 _, index, total, title = line.split('|', 3)
+                title = json.loads(title)
                 update(job_id, title=title, item=int(index) if index.isdigit() else 1, total=int(total) if total.isdigit() else None, percent=0, message='İndiriliyor…')
             elif line.startswith('PROGRESS|'):
                 parts = line.split('|')
@@ -176,21 +209,29 @@ def run_job(job_id, value, mode, scope):
                         return 0
                 done, exact, estimate, speed, eta = map(number, parts[1:6])
                 total = exact or estimate
-                update(job_id, percent=min(99, round(done / total * 100, 1)) if total else 0, speed=speed, eta=eta, message='İndiriliyor…')
+                pct = min(99, round(done / total * 100, 1)) if total else 0
+                with LOCK:
+                    prev = JOBS[job_id].get('percent', 0)
+                update(job_id, percent=max(prev, pct), speed=speed, eta=eta, message='İndiriliyor…')
             elif line.startswith('FILE|'):
-                path = Path(line[5:]).resolve()
-                if path.is_relative_to(folder.resolve()) and path.suffix.lower() == '.' + mode and path.exists():
-                    with LOCK:
-                        JOBS[job_id]['files'].append({'name': path.name, 'url': '/files/' + job_id + '/' + path.name})
-            elif line.startswith(('[ExtractAudio]', '[Merger]', '[VideoConvertor]')):
+                publish_file(job_id, Path(json.loads(line[5:])), folder, mode)
+            elif line.startswith(('[ExtractAudio]', '[Merger]', '[VideoConvertor]', '[VideoRemuxer]')):
                 update(job_id, message='Dosya dönüştürülüyor…', percent=99, speed=0, eta=0)
             elif 'ERROR:' in line:
                 errors.append(clean_error(line))
         code = process.wait()
+        # A successful process may omit its final output notification.
+        # Only recover complete files from this job, never older downloads.
+        if code == 0:
+            for path in folder.glob('*.' + mode):
+                publish_file(job_id, path, folder, mode)
         with LOCK:
             count = len(JOBS[job_id]['files'])
         if code or not count:
-            update(job_id, status='error', message=errors[-1] if errors else 'İndirme tamamlanamadı.', percent=0)
+            detail = errors[-1] if errors else 'İndirme tamamlanamadı.'
+            if count:
+                detail = f'{count} dosya kaydedildi; bazı işlemler tamamlanamadı. ' + detail
+            update(job_id, status='error', message=detail, percent=0)
         else:
             update(job_id, status='completed', message=f'{count} dosya hazır.', percent=100, speed=0, eta=0)
     except Exception as exc:
@@ -199,6 +240,8 @@ def run_job(job_id, value, mode, scope):
         if 'process' in locals():
             with LOCK:
                 PROCESSES.discard(process)
+        if folder.exists() and not any(folder.iterdir()):
+            folder.rmdir()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -253,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
             return
         if path == '/api/config':
-            return self.respond({'app': 'youtube-indirici', 'ready': TOOL.exists() and bool(shutil.which('ffmpeg')), 'download_folder': 'indirilenler'})
+            return self.respond({'app': 'youtube-indirici', 'ready': TOOL.exists() and bool(shutil.which('ffmpeg')), 'download_folder': 'indirilenler/mp3 (ses) · indirilenler/mp4 (video)'})
         if path.startswith('/api/jobs/'):
             with LOCK:
                 data = dict(JOBS.get(path.rsplit('/', 1)[-1], {}))
@@ -281,6 +324,7 @@ class Handler(BaseHTTPRequestHandler):
         body = file.read_bytes()
         self.send_response(200)
         self.send_header('Content-Type', types[file.suffix])
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', str(len(body)))
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
@@ -326,8 +370,107 @@ class Handler(BaseHTTPRequestHandler):
             self.respond({'error': 'İşlem yapılamadı. Bağlantını ve kurulumunu kontrol et.'}, 500)
 
 
+def fast_download():
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from urllib.request import Request, urlopen
+    argc = int(os.environ.get('FAST_DL_ARGC', '0'))
+    args = [os.environ.get(f'FAST_DL_ARG_{i}', '') for i in range(argc)]
+    directory, output, url = '.', '', ''
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == '--dir' and i + 1 < len(args):
+            directory = args[i + 1]
+            i += 2
+        elif arg == '--out' and i + 1 < len(args):
+            output = args[i + 1]
+            i += 2
+        elif arg == '--header' and i + 1 < len(args):
+            if ':' in args[i + 1]:
+                k, v = args[i + 1].split(':', 1)
+                headers[k.strip()] = v.strip()
+            i += 2
+        elif arg == '--' and i + 1 < len(args):
+            url = args[i + 1]
+            break
+        elif arg.startswith(('http://', 'https://')):
+            url = arg
+            i += 1
+        else:
+            i += 1
+    if not url or not output:
+        raise SystemExit(1)
+    target = (Path(directory) / output).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    q = parse_qs(urlparse(url).query)
+    total = int(q['clen'][0]) if 'clen' in q and q['clen'][0].isdigit() else 0
+    if not total:
+        probe = dict(headers)
+        probe['Range'] = 'bytes=0-0'
+        with urlopen(Request(url, headers=probe), timeout=15) as resp:
+            cr = resp.headers.get('Content-Range', '')
+            if '/' in cr and cr.rsplit('/', 1)[-1].isdigit():
+                total = int(cr.rsplit('/', 1)[-1])
+            elif resp.headers.get('Content-Length', '').isdigit():
+                total = int(resp.headers['Content-Length'])
+    if not total:
+        with urlopen(Request(url, headers=headers), timeout=30) as resp, target.open('wb') as f:
+            shutil.copyfileobj(resp, f)
+        return
+    chunk = 262144 if total < 16 * 1048576 else 1048576
+    ranges = [(s, min(s + chunk - 1, total - 1)) for s in range(0, total, chunk)]
+    use_query_range = 'googlevideo.com' in url and 'range=' not in url
+    started = time.monotonic()
+    done = 0
+    last_print = 0.0
+    file_lock = threading.Lock()
+    with target.open('wb') as f:
+        f.truncate(total)
+        def fetch(rng):
+            nonlocal done, last_print
+            s, e = rng
+            expected = e - s + 1
+            for attempt in range(5):
+                try:
+                    if use_query_range:
+                        req = Request(f'{url}&range={s}-{e}', headers=headers)
+                    else:
+                        h = dict(headers)
+                        h['Range'] = f'bytes={s}-{e}'
+                        req = Request(url, headers=h)
+                    with urlopen(req, timeout=8) as resp:
+                        data = resp.read()
+                    if len(data) != expected:
+                        raise IOError('Eksik parça')
+                    with file_lock:
+                        f.seek(s)
+                        f.write(data)
+                        done += len(data)
+                        now = time.monotonic()
+                        if now - last_print >= 0.1 or done == total:
+                            elapsed = max(0.001, now - started)
+                            speed = done / elapsed
+                            eta = (total - done) / speed if speed > 0 else 0
+                            print(f'PROGRESS|{done}|{total}|{total}|{speed:.1f}|{eta:.1f}', flush=True)
+                            last_print = now
+                    return
+                except Exception:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.2 * (attempt + 1))
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            futures = [pool.submit(fetch, r) for r in ranges]
+            for fut in as_completed(futures):
+                fut.result()
+
+
 if __name__ == '__main__':
-    DOWNLOADS.mkdir(exist_ok=True)
+    if '--fast-dl' in __import__('sys').argv:
+        fast_download()
+        raise SystemExit(0)
+    for mode in ('mp3', 'mp4'):
+        (DOWNLOADS / mode).mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     threading.Thread(target=watch_browser, args=(server,), daemon=True).start()
     print(f'Site hazır: {ORIGIN}\nİndirilenler: {DOWNLOADS}\nKapatmak için Ctrl+C.')
